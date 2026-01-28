@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAgent = createAgent;
 exports.queryAgent = queryAgent;
 exports.streamQueryAgent = streamQueryAgent;
+exports.clearAgentCache = clearAgentCache;
 const openai_1 = require("@langchain/openai");
 const output_parsers_1 = require("@langchain/core/output_parsers");
 const runnables_1 = require("@langchain/core/runnables");
@@ -10,6 +11,8 @@ const prompts_1 = require("@langchain/core/prompts");
 const vectorstore_1 = require("./vectorstore");
 const db_1 = require("./db");
 let llm = null;
+const agentCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
 function getChatModel() {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -36,6 +39,11 @@ const formatDocs = (docs) => {
         .join("\n\n---\n\n");
 };
 async function createAgent(agentId, customSystemPrompt) {
+    const cacheKey = `${agentId}:${customSystemPrompt || 'default'}`;
+    const cached = agentCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.chain;
+    }
     const llm = getChatModel();
     let systemPrompt = customSystemPrompt;
     if (!systemPrompt) {
@@ -47,7 +55,7 @@ async function createAgent(agentId, customSystemPrompt) {
         ["human", "Context:\n{context}\n\nQuestion: {input}\n\nAnswer:"],
     ]);
     const retrieveAndFormat = async (input) => {
-        const docs = await (0, vectorstore_1.similaritySearch)(input, agentId, 3);
+        const docs = await (0, vectorstore_1.similaritySearch)(input, agentId, 5, 0.7);
         return formatDocs(docs);
     };
     const chain = runnables_1.RunnableSequence.from([
@@ -59,6 +67,7 @@ async function createAgent(agentId, customSystemPrompt) {
         llm,
         new output_parsers_1.StringOutputParser(),
     ]);
+    agentCache.set(cacheKey, { chain, timestamp: Date.now() });
     return chain;
 }
 async function queryAgent(agentId, query, options) {
@@ -71,6 +80,18 @@ async function* streamQueryAgent(agentId, query, options) {
     const stream = await agent.stream({ input: query });
     for await (const chunk of stream) {
         yield chunk;
+    }
+}
+function clearAgentCache(agentId) {
+    if (agentId) {
+        for (const [key] of agentCache) {
+            if (key.startsWith(agentId)) {
+                agentCache.delete(key);
+            }
+        }
+    }
+    else {
+        agentCache.clear();
     }
 }
 //# sourceMappingURL=retrieval.js.map

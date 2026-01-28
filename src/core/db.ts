@@ -25,10 +25,6 @@ export function getPool(): Pool {
             console.error("Unexpected pool error:", err);
             pool = null;
         });
-
-        pool.on("connect", () => {
-            console.log("Knowledge Base DB: New client connected to pool");
-        });
     }
 
     return pool;
@@ -47,11 +43,14 @@ export async function executeQuery<T = any>(
 ): Promise<T[]> {
     let client: PoolClient | null = null;
     try {
-        console.log("Knowledge Base DB: Acquiring connection...");
         client = await getPool().connect();
-        console.log("Knowledge Base DB: Connection acquired, executing query...");
         const result = await client.query(query, params);
-        console.log(`Knowledge Base DB: Query returned ${result.rows.length} rows`);
+
+        // Only log in development or with DEBUG flag
+        if (process.env.DEBUG_KB_QUERIES === 'true') {
+            console.log(`KB Query returned ${result.rows.length} rows`);
+        }
+
         return result.rows;
     } catch (error) {
         console.error("Knowledge Base DB: Query error:", error);

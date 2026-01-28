@@ -28,9 +28,6 @@ function getPool() {
             console.error("Unexpected pool error:", err);
             pool = null;
         });
-        pool.on("connect", () => {
-            console.log("Knowledge Base DB: New client connected to pool");
-        });
     }
     return pool;
 }
@@ -43,11 +40,11 @@ async function closePool() {
 async function executeQuery(query, params = []) {
     let client = null;
     try {
-        console.log("Knowledge Base DB: Acquiring connection...");
         client = await getPool().connect();
-        console.log("Knowledge Base DB: Connection acquired, executing query...");
         const result = await client.query(query, params);
-        console.log(`Knowledge Base DB: Query returned ${result.rows.length} rows`);
+        if (process.env.DEBUG_KB_QUERIES === 'true') {
+            console.log(`KB Query returned ${result.rows.length} rows`);
+        }
         return result.rows;
     }
     catch (error) {

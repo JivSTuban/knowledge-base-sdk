@@ -26,19 +26,21 @@ async function addDocuments(documents) {
         ]);
     }
 }
-async function similaritySearch(query, agentId, k = 3) {
+async function similaritySearch(query, agentId, k = 5, minSimilarity = 0.7) {
     const queryVector = await (0, embeddings_1.getEmbeddings)().embedQuery(query);
     const results = await (0, db_1.executeQuery)(`SELECT content, metadata, source,
             1 - (embedding <=> $1::vector) as similarity
      FROM knowledge_base.documents
      WHERE metadata->>'agentId' = $2
+       AND (1 - (embedding <=> $1::vector)) >= $4
      ORDER BY embedding <=> $1::vector
-     LIMIT $3`, [`[${queryVector.join(",")}]`, agentId, k]);
+     LIMIT $3`, [`[${queryVector.join(",")}]`, agentId, k, minSimilarity]);
     return results.map((row) => ({
         pageContent: row.content,
         metadata: {
             ...row.metadata,
             source: row.source,
+            similarity: row.similarity,
         },
     }));
 }

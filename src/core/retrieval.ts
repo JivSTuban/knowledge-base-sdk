@@ -8,6 +8,10 @@ import { executeQuery } from "./db";
 
 let llm: ChatOpenAI | null = null;
 
+// Agent cache for performance optimization
+const agentCache = new Map<string, { chain: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 function getChatModel(): ChatOpenAI {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -42,6 +46,14 @@ const formatDocs = (docs: Document[]): string => {
 };
 
 export async function createAgent(agentId: string, customSystemPrompt?: string) {
+    const cacheKey = `${agentId}:${customSystemPrompt || 'default'}`;
+    const cached = agentCache.get(cacheKey);
+
+    // Return cached agent if still valid
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.chain;
+    }
+
     const llm = getChatModel();
 
     // Fetch agent's system prompt from DB if not provided
@@ -60,7 +72,8 @@ export async function createAgent(agentId: string, customSystemPrompt?: string) 
     ]);
 
     const retrieveAndFormat = async (input: string): Promise<string> => {
-        const docs = await similaritySearch(input, agentId, 3);
+        // Use updated parameters: k=5, minSimilarity=0.7
+        const docs = await similaritySearch(input, agentId, 5, 0.7);
         return formatDocs(docs);
     };
 
@@ -73,6 +86,9 @@ export async function createAgent(agentId: string, customSystemPrompt?: string) 
         llm,
         new StringOutputParser(),
     ]);
+
+    // Cache the agent
+    agentCache.set(cacheKey, { chain, timestamp: Date.now() });
 
     return chain;
 }
@@ -97,5 +113,21 @@ export async function* streamQueryAgent(
 
     for await (const chunk of stream) {
         yield chunk;
+    }
+}
+
+/**
+ * Clear agent cache for specific agent or all agents
+ * @param agentId - Optional agent ID to clear cache for specific agent only
+ */
+export function clearAgentCache(agentId?: string): void {
+    if (agentId) {
+        for (const [key] of agentCache) {
+            if (key.startsWith(agentId)) {
+                agentCache.delete(key);
+            }
+        }
+    } else {
+        agentCache.clear();
     }
 }

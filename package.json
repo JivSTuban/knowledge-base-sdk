@@ -1,17 +1,16 @@
 {
-    "name": "@ayahay/knowledge-base-sdk",
+    "name": "@jivtuban/knowledge-base-sdk",
     "version": "1.0.0",
     "description": "Reusable Knowledge Base SDK for Ayahay applications with pgvector RAG",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com",
-        "@ayahay:registry": "https://npm.pkg.github.com"
+        "@jivtuban:registry": "https://npm.pkg.github.com"
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/YOUR_GITHUB_ORG/ayahay.git",
-        "directory": "packages/knowledge-base-sdk"
+        "url": "git+https://github.com/JivSTuban/knowledge-base-sdk.git"
     },
     "scripts": {
         "build": "tsc",

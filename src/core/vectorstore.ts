@@ -35,24 +35,27 @@ export async function addDocuments(documents: Document[]): Promise<void> {
 export async function similaritySearch(
     query: string,
     agentId: string,
-    k: number = 3,
+    k: number = 5,
+    minSimilarity: number = 0.7,
 ): Promise<Document[]> {
     // Generate embedding for query
     const queryVector = await getEmbeddings().embedQuery(query);
 
-    // Search for similar documents
+    // Search for similar documents with similarity threshold
     const results = await executeQuery<{
         content: string;
         metadata: any;
         source: string;
+        similarity: number;
     }>(
         `SELECT content, metadata, source,
             1 - (embedding <=> $1::vector) as similarity
      FROM knowledge_base.documents
      WHERE metadata->>'agentId' = $2
+       AND (1 - (embedding <=> $1::vector)) >= $4
      ORDER BY embedding <=> $1::vector
      LIMIT $3`,
-        [`[${queryVector.join(",")}]`, agentId, k],
+        [`[${queryVector.join(",")}]`, agentId, k, minSimilarity],
     );
 
     return results.map((row) => ({
@@ -60,6 +63,7 @@ export async function similaritySearch(
         metadata: {
             ...row.metadata,
             source: row.source,
+            similarity: row.similarity,
         },
     }));
 }
