@@ -25,6 +25,7 @@ function getChatModel() {
             temperature: 0.7,
             streaming: true,
             maxTokens: 1024,
+            maxRetries: 0,
         });
     }
     return llm;
