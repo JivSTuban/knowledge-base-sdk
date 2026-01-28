@@ -26,6 +26,8 @@ function getChatModel() {
             streaming: true,
             maxTokens: 1024,
             maxRetries: 0,
+            timeout: 30000,
+            callbacks: [],
         });
     }
     return llm;

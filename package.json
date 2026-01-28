@@ -1,5 +1,5 @@
 {
-    "name": "@jivtuban/knowledge-base-sdk",
+    "name": "@ayahay/knowledge-base-sdk",
     "version": "1.0.0",
     "description": "Reusable Knowledge Base SDK for Ayahay applications with pgvector RAG",
     "main": "dist/index.js",

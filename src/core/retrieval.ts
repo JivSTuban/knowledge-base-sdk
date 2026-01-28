@@ -25,7 +25,10 @@ function getChatModel(): ChatOpenAI {
             temperature: 0.7,
             streaming: true,
             maxTokens: 1024,
-            maxRetries: 0, // Disable retries to prevent tiktoken timeout delays
+            maxRetries: 0, // Disable retries completely - no tiktoken!
+            timeout: 30000, // 30 second timeout
+            // Disable all callbacks that might trigger tiktoken
+            callbacks: [],
         });
     }
 
