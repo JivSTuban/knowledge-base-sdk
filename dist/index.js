@@ -20,6 +20,8 @@ __exportStar(require("./core/embeddings"), exports);
 __exportStar(require("./core/storage"), exports);
 __exportStar(require("./core/vectorstore"), exports);
 __exportStar(require("./core/training"), exports);
+__exportStar(require("./core/chatMemory"), exports);
+__exportStar(require("./core/chat"), exports);
 var retrieval_1 = require("./core/retrieval");
 Object.defineProperty(exports, "queryAgent", { enumerable: true, get: function () { return retrieval_1.queryAgent; } });
 Object.defineProperty(exports, "streamQueryAgent", { enumerable: true, get: function () { return retrieval_1.streamQueryAgent; } });

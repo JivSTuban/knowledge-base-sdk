@@ -1,6 +1,6 @@
 {
     "name": "@ayahay/knowledge-base-sdk",
-    "version": "1.1.2",
+    "version": "1.2.0",
     "description": "Reusable Knowledge Base SDK for Ayahay applications with pgvector RAG",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
