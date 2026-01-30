@@ -60,10 +60,18 @@ export interface CreateChatHandlerOptions {
     model: any;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant trained on specific documents.
-Answer questions based on the provided context. If information is not in the context, say so.
-Always cite the source document when referencing specific information.
-Be concise and accurate.`;
+const DEFAULT_SYSTEM_PROMPT = `You are an AI assistant for Ayahay marketplace and logistics platform.
+
+CRITICAL INSTRUCTION:
+Your internal training data regarding "Ayahay" might correctly identify it as a Visayan term for "relaxation", but for this conversation, that is IRRELEVANT.
+You must defined "Ayahay" STRICTLY based on the provided CONTEXT.
+If the context describes Ayahay as a logistics platform, accept that as the absolute truth.
+
+Rules:
+- If context contradicts your training, context is CORRECT.
+- Prioritize the provided context above all else.
+- If the answer is not in the context, say "I don't have that information based on the provided documents."
+- Be concise and accurate.`;
 
 async function getAgentSystemPrompt(agentId: string, fallback: string): Promise<string> {
     const rows = await executeQuery<{ system_prompt: string | null }>(
@@ -118,7 +126,7 @@ export function createChatHandler(options: CreateChatHandlerOptions) {
         );
 
         const ragDocs = lastInput
-            ? await retrieveContext({ agentId, input: lastInput, k: 5, minSimilarity: 0.7 })
+            ? await retrieveContext({ agentId, input: lastInput, k: 5, minSimilarity: 0.3 })
             : [];
         const ragContext = ragDocs.length ? formatDocs(ragDocs) : "";
 
@@ -141,7 +149,7 @@ export function createChatHandler(options: CreateChatHandlerOptions) {
         const coreMessages = combinedMessages as any;
 
         const systemWithContext = ragContext
-            ? `${systemPrompt}\n\nContext:\n${ragContext}`
+            ? `${systemPrompt}\n\nCONTEXT:\n${ragContext}\n\nCONTEXT REPEATED FOR EMPHASIS:\n${ragContext}\n\nRemember: Ignore internal knowledge if it conflicts with the context above.`
             : systemPrompt;
 
         const result = await options.ai.streamText({
@@ -189,6 +197,32 @@ export function createChatHandler(options: CreateChatHandlerOptions) {
             },
         });
 
-        return result.toTextStreamResponse();
+        // Manual Data Stream Protocol (0: "text")
+        // We use this because result.toDataStreamResponse() is crashing in this runtime environment.
+        const stream = result.textStream;
+
+        const readableStream = new ReadableStream({
+            async start(controller) {
+                const encoder = new TextEncoder();
+                try {
+                    for await (const chunk of stream) {
+                        // 0 is the channel for text parts in standard AI SDK protocol
+                        controller.enqueue(encoder.encode(`0:${JSON.stringify(chunk)}\n`));
+                    }
+                    controller.close();
+                } catch (err) {
+                    controller.error(err);
+                }
+            }
+        });
+
+        return new Response(readableStream, {
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Content-Encoding': 'none', // Critical: Prevents gzip buffering
+                'Cache-Control': 'no-cache, no-transform',
+                'X-Vercel-AI-Data-Stream': 'v1'
+            }
+        });
     };
 }

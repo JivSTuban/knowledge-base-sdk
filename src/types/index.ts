@@ -55,9 +55,15 @@ export interface TrainOptions {
     systemPrompt?: string;
 }
 
+export interface ChatMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
 export interface QueryOptions {
     systemPrompt?: string;
     k?: number; // Number of similar documents to retrieve
+    history?: ChatMessage[]; // Conversation history for multi-turn context
 }
 
 export interface ClientConfig {

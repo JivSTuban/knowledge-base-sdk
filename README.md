@@ -9,7 +9,8 @@ A production-ready TypeScript SDK for building RAG (Retrieval-Augmented Generati
 ## Features
 
 - 🤖 **AI-Powered Q&A**: Train agents with documents and query using GPT-4 with retrieval-augmented generation
-- 📄 **Multi-Format Support**: Process PDF, Markdown, TXT, DOCX files and web URLs
+- � **Live Data Tools**: LangChain tools for real-time trip schedules, fare rates, and vehicle pricing
+- �� **Multi-Format Support**: Process PDF, Markdown, TXT, DOCX files and web URLs
 - 🔄 **Streaming Responses**: Real-time Server-Sent Events for chat interfaces
 - 🗄️ **Vector Search**: PostgreSQL pgvector with HNSW indexing (70% faster searches)
 - ⚡ **High Performance**: Agent caching, similarity filtering, optimized retrieval (2-3x faster queries)
@@ -28,7 +29,7 @@ A production-ready TypeScript SDK for building RAG (Retrieval-Augmented Generati
 // package.json
 {
   "dependencies": {
-    "@ayahay/knowledge-base-sdk": "JivSTuban/knowledge-base-sdk#v1.1.2"
+    "@ayahay/knowledge-base-sdk": "JivSTuban/knowledge-base-sdk#v1.2.1"
   }
 }
 ```

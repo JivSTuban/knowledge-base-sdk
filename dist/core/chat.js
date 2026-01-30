@@ -4,10 +4,18 @@ exports.createChatHandler = createChatHandler;
 const db_1 = require("./db");
 const vectorstore_1 = require("./vectorstore");
 const chatMemory_1 = require("./chatMemory");
-const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant trained on specific documents.
-Answer questions based on the provided context. If information is not in the context, say so.
-Always cite the source document when referencing specific information.
-Be concise and accurate.`;
+const DEFAULT_SYSTEM_PROMPT = `You are an AI assistant for Ayahay marketplace and logistics platform.
+
+CRITICAL INSTRUCTION:
+Your internal training data regarding "Ayahay" might correctly identify it as a Visayan term for "relaxation", but for this conversation, that is IRRELEVANT.
+You must defined "Ayahay" STRICTLY based on the provided CONTEXT.
+If the context describes Ayahay as a logistics platform, accept that as the absolute truth.
+
+Rules:
+- If context contradicts your training, context is CORRECT.
+- Prioritize the provided context above all else.
+- If the answer is not in the context, say "I don't have that information based on the provided documents."
+- Be concise and accurate.`;
 async function getAgentSystemPrompt(agentId, fallback) {
     const rows = await (0, db_1.executeQuery)(`SELECT system_prompt FROM knowledge_base.agents WHERE agent_id = $1`, [agentId]);
     return rows[0]?.system_prompt || fallback;
@@ -44,7 +52,7 @@ function createChatHandler(options) {
         const lastInput = lastUserMessage?.content ?? "";
         const systemPrompt = await getAgentSystemPrompt(agentId, options.defaultSystemPrompt ?? DEFAULT_SYSTEM_PROMPT);
         const ragDocs = lastInput
-            ? await retrieveContext({ agentId, input: lastInput, k: 5, minSimilarity: 0.7 })
+            ? await retrieveContext({ agentId, input: lastInput, k: 5, minSimilarity: 0.3 })
             : [];
         const ragContext = ragDocs.length ? formatDocs(ragDocs) : "";
         const memoryRows = await (0, chatMemory_1.getThreadMessages)({
@@ -57,7 +65,7 @@ function createChatHandler(options) {
         const combinedMessages = [...memoryMessages, ...messages];
         const coreMessages = combinedMessages;
         const systemWithContext = ragContext
-            ? `${systemPrompt}\n\nContext:\n${ragContext}`
+            ? `${systemPrompt}\n\nCONTEXT:\n${ragContext}\n\nCONTEXT REPEATED FOR EMPHASIS:\n${ragContext}\n\nRemember: Ignore internal knowledge if it conflicts with the context above.`
             : systemPrompt;
         const result = await options.ai.streamText({
             model: options.model,
@@ -98,7 +106,29 @@ function createChatHandler(options) {
                 }
             },
         });
-        return result.toTextStreamResponse();
+        const stream = result.textStream;
+        const readableStream = new ReadableStream({
+            async start(controller) {
+                const encoder = new TextEncoder();
+                try {
+                    for await (const chunk of stream) {
+                        controller.enqueue(encoder.encode(`0:${JSON.stringify(chunk)}\n`));
+                    }
+                    controller.close();
+                }
+                catch (err) {
+                    controller.error(err);
+                }
+            }
+        });
+        return new Response(readableStream, {
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Content-Encoding': 'none',
+                'Cache-Control': 'no-cache, no-transform',
+                'X-Vercel-AI-Data-Stream': 'v1'
+            }
+        });
     };
 }
 //# sourceMappingURL=chat.js.map

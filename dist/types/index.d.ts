@@ -48,9 +48,14 @@ export interface TrainOptions {
     tenantId?: number;
     systemPrompt?: string;
 }
+export interface ChatMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
 export interface QueryOptions {
     systemPrompt?: string;
     k?: number;
+    history?: ChatMessage[];
 }
 export interface ClientConfig {
     baseUrl: string;

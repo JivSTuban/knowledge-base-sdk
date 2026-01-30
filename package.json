@@ -1,6 +1,6 @@
 {
     "name": "@ayahay/knowledge-base-sdk",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "Reusable Knowledge Base SDK for Ayahay applications with pgvector RAG",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -36,7 +36,8 @@
         "kysely": "^0.28.9",
         "pdf-parse": "^2.4.5",
         "pg": "^8.17.2",
-        "uuid": "^11.1.0"
+        "uuid": "^11.1.0",
+        "zod": "^4.3.6"
     },
     "devDependencies": {
         "@types/node": "^22.19.7",
