@@ -117,28 +117,34 @@ export async function queryAgentWithTools(
     options?: QueryOptions & { toolContext?: ToolContext }
 ): Promise<string> {
     const llm = getChatModel();
-    
+
     // Fetch agent's system prompt from DB
     const agentData = await executeQuery<{ system_prompt: string }>(
         `SELECT system_prompt FROM knowledge_base.agents WHERE agent_id = $1`,
         [agentId]
     );
     let systemPrompt = options?.systemPrompt || agentData[0]?.system_prompt || DEFAULT_SYSTEM_PROMPT;
-    
+
+    // Add current date/time context to system prompt
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    systemPrompt = `Current Date: ${dateStr}\nCurrent Time: ${timeStr}\n\n${systemPrompt}`;
+
     // Retrieve context based on the query
     const docs = await similaritySearch(query, agentId, 5, 0.3);
     const context = formatDocs(docs);
-    
+
     // Initialize tools if context is provided
     let tools: any[] = [];
-    
+
     if (options?.toolContext) {
         tools = [
             createSearchTripsTool(options.toolContext),
             createGetFareRatesTool(options.toolContext),
             createGetVehicleRatesTool(options.toolContext),
         ];
-        
+
         // Enhance system prompt with tool usage instructions
         systemPrompt = `${systemPrompt}
 
@@ -169,84 +175,144 @@ You have access to live data tools for real-time trip and fare information:
 
 Always use tools for real-time data. Your training data is for general information only.`;
     }
-    
+
     // Build messages array with history
     const messages: Array<['system' | 'human' | 'assistant', string]> = [
         ['system', systemPrompt],
     ];
-    
-    // Add conversation history if provided
+
+    // Helper function to escape curly braces for LangChain templates
+    const escapeForTemplate = (str: string): string => str.replace(/\{/g, '{{').replace(/\}/g, '}}');
+
+    // Add conversation history if provided (escape braces to prevent template errors)
     if (options?.history && options.history.length > 0) {
         for (const msg of options.history) {
-            messages.push([msg.role === 'user' ? 'human' : 'assistant', msg.content]);
+            messages.push([msg.role === 'user' ? 'human' : 'assistant', escapeForTemplate(msg.content)]);
         }
     }
-    
+
+    // Escape context to prevent template errors
+    const escapedContext = escapeForTemplate(context);
+    const escapedQuery = escapeForTemplate(query);
+
     // Add current query with context
-    const humanMessage = options?.toolContext 
-        ? `CONTEXT (General Information):\n${context}\n\nQuestion: ${query}\n\nAnswer (use tools for live data, context for general info):`
-        : `CONTEXT:\n${context}\n\nQuestion: ${query}\n\nAnswer (based on context and our conversation):`;
-    
+    const humanMessage = options?.toolContext
+        ? `CONTEXT (General Information):\n${escapedContext}\n\nQuestion: ${escapedQuery}\n\nAnswer (use tools for live data, context for general info):`
+        : `CONTEXT:\n${escapedContext}\n\nQuestion: ${escapedQuery}\n\nAnswer (based on context and our conversation):`;
+
     messages.push(['human', humanMessage]);
-    
+
     const prompt = ChatPromptTemplate.fromMessages(messages);
-    
+
     // Use tools if available
     if (tools.length > 0) {
         const llmWithTools = llm.bindTools(tools);
         const chain = RunnableSequence.from([prompt, llmWithTools]);
         const result = await chain.invoke({});
-        
+
         // Check if LLM wants to call tools
         if (result.tool_calls && result.tool_calls.length > 0) {
             // Execute each tool call
             const toolResults: string[] = [];
-            
+
             for (const toolCall of result.tool_calls) {
                 const tool = tools.find(t => t.name === toolCall.name);
                 if (tool) {
                     try {
-                        const toolResult = await tool.invoke(toolCall.args);
-                        // Convert to simple text format to avoid template issues
+                        const rawToolResult = await tool.invoke(toolCall.args);
+                        // Convert to simple text format to avoid template issues (escape curly braces)
                         let resultText = '';
+
+                        // Parse tool result - tools return JSON strings, so we need to parse them
+                        let toolResult: any;
+                        if (typeof rawToolResult === 'string') {
+                            try {
+                                toolResult = JSON.parse(rawToolResult);
+                            } catch {
+                                // Not JSON, use as-is but escape curly braces
+                                resultText = rawToolResult.replace(/\{/g, '{{').replace(/\}/g, '}}');
+                                toolResults.push(`Tool: ${toolCall.name}\n${resultText}`);
+                                continue;
+                            }
+                        } else {
+                            toolResult = rawToolResult;
+                        }
+
                         if (typeof toolResult === 'object' && toolResult !== null) {
-                            if (toolResult.success) {
-                                resultText = `Success: true\nOrigin: ${toolResult.origin || 'N/A'}\nDestination: ${toolResult.destination || 'N/A'}\n`;
+                            if (toolResult.success !== undefined) {
+                                resultText = `Success: ${toolResult.success}\n`;
+                                if (toolResult.origin) resultText += `Origin: ${toolResult.origin}\n`;
+                                if (toolResult.destination) resultText += `Destination: ${toolResult.destination}\n`;
+                                if (toolResult.shipping_line) resultText += `Shipping Line: ${toolResult.shipping_line}\n`;
+
+                                // Handle trips array from search_trips
+                                if (toolResult.trips && Array.isArray(toolResult.trips)) {
+                                    resultText += `Trips found: ${toolResult.trips.length}\n`;
+                                    if (toolResult.trips.length > 0) {
+                                        resultText += 'Trip details:\n';
+                                        toolResult.trips.forEach((trip: any, idx: number) => {
+                                            resultText += `  Trip ${idx + 1}: Departure ${trip.departure_time || trip.total_departure_time || 'N/A'}, Arrival ${trip.arrival_time || 'N/A'}, Vessel ${trip.vessel_name || 'N/A'}\n`;
+                                        });
+                                    } else {
+                                        resultText += 'No trips available for this route/date.\n';
+                                    }
+                                }
+
+                                // Handle rates array from get_fare_rates/get_vehicle_rates
                                 if (toolResult.rates && Array.isArray(toolResult.rates)) {
                                     resultText += `Rates found: ${toolResult.rates.length}\n`;
                                     if (toolResult.rates.length > 0) {
                                         resultText += 'Rate details:\n';
                                         toolResult.rates.forEach((rate: any, idx: number) => {
-                                            resultText += `  Rate ${idx + 1}: ${JSON.stringify(rate).replace(/[{}]/g, '')}\n`;
+                                            // Format rate as simple key-value pairs
+                                            const rateStr = Object.entries(rate)
+                                                .map(([k, v]) => `${k}: ${v}`)
+                                                .join(', ');
+                                            resultText += `  Rate ${idx + 1}: ${rateStr}\n`;
                                         });
                                     }
                                 }
+
                                 if (toolResult.shipping_lines) {
                                     resultText += `Shipping lines: ${Array.isArray(toolResult.shipping_lines) ? toolResult.shipping_lines.join(', ') : toolResult.shipping_lines}\n`;
                                 }
+
+                                if (toolResult.count !== undefined) {
+                                    resultText += `Total count: ${toolResult.count}\n`;
+                                }
+
+                                if (toolResult.error) {
+                                    resultText += `Error: ${toolResult.error}\n`;
+                                }
                             } else {
-                                resultText = `Success: false\nError: ${toolResult.error || 'Unknown error'}`;
+                                // Fallback: convert to simple key-value format (no curly braces)
+                                resultText = Object.entries(toolResult)
+                                    .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v).replace(/\{/g, '[[').replace(/\}/g, ']]') : v}`)
+                                    .join('\n');
                             }
                         } else {
                             resultText = String(toolResult);
                         }
+
+                        // Final safety: escape any remaining curly braces
+                        resultText = resultText.replace(/\{/g, '{{').replace(/\}/g, '}}');
                         toolResults.push(`Tool: ${toolCall.name}\n${resultText}`);
                     } catch (error) {
                         toolResults.push(`Tool: ${toolCall.name}\nError: ${error instanceof Error ? error.message : String(error)}`);
                     }
                 }
             }
-            
+
             // Add tool results to messages and get final response
             const assistantMsg = typeof result.content === 'string' ? result.content : 'Calling tools...';
             messages.push(['assistant', assistantMsg]);
             messages.push(['human', `Here are the tool results:\n\n${toolResults.join('\n\n')}\n\nPlease provide a helpful answer based on these results.`]);
-            
+
             const finalPrompt = ChatPromptTemplate.fromMessages(messages);
             const finalChain = RunnableSequence.from([finalPrompt, llm, new StringOutputParser()]);
             return await finalChain.invoke({});
         }
-        
+
         // No tool calls, return content directly
         return result.content as string || 'I apologize, but I was unable to generate a response.';
     } else {
@@ -261,28 +327,34 @@ export async function* streamQueryAgent(
     options?: QueryOptions & { toolContext?: ToolContext }
 ): AsyncGenerator<string, void, unknown> {
     const llm = getChatModel();
-    
+
     // Fetch agent's system prompt from DB
     const agentData = await executeQuery<{ system_prompt: string }>(
         `SELECT system_prompt FROM knowledge_base.agents WHERE agent_id = $1`,
         [agentId]
     );
     let systemPrompt = options?.systemPrompt || agentData[0]?.system_prompt || DEFAULT_SYSTEM_PROMPT;
-    
+
+    // Add current date/time context to system prompt
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    systemPrompt = `Current Date: ${dateStr}\nCurrent Time: ${timeStr}\n\n${systemPrompt}`;
+
     // Retrieve context based on the query
     const docs = await similaritySearch(query, agentId, 5, 0.3);
     const context = formatDocs(docs);
-    
+
     // Initialize tools if context is provided
     let tools: any[] = [];
-    
+
     if (options?.toolContext) {
         tools = [
             createSearchTripsTool(options.toolContext),
             createGetFareRatesTool(options.toolContext),
             createGetVehicleRatesTool(options.toolContext),
         ];
-        
+
         // Enhance system prompt with tool usage instructions
         systemPrompt = `${systemPrompt}
 
@@ -313,33 +385,33 @@ You have access to live data tools for real-time trip and fare information:
 
 Always use tools for real-time data. Your training data is for general information only.`;
     }
-    
+
     // Build messages array with history
     const messages: Array<['system' | 'human' | 'assistant', string]> = [
         ['system', systemPrompt],
     ];
-    
+
     // Add conversation history if provided
     if (options?.history && options.history.length > 0) {
         for (const msg of options.history) {
             messages.push([msg.role === 'user' ? 'human' : 'assistant', msg.content]);
         }
     }
-    
+
     // Add current query with context
-    const humanMessage = options?.toolContext 
+    const humanMessage = options?.toolContext
         ? `CONTEXT (General Information):\n${context}\n\nQuestion: ${query}\n\nAnswer (use tools for live data, context for general info):`
         : `CONTEXT:\n${context}\n\nQuestion: ${query}\n\nAnswer (based on context and our conversation):`;
-    
+
     messages.push(['human', humanMessage]);
-    
+
     const prompt = ChatPromptTemplate.fromMessages(messages);
-    
+
     // For now, use simple streaming without tool calling
     // Tool calling requires agent executor which doesn't stream well
     // TODO: Implement proper agent executor with streaming in Phase 2
     const chain = RunnableSequence.from([prompt, llm, new StringOutputParser()]);
-    
+
     const stream = await chain.stream({});
     for await (const chunk of stream) {
         yield chunk;
