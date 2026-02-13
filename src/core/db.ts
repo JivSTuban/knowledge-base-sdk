@@ -1,6 +1,25 @@
 import { Pool, PoolClient } from "pg";
+import * as fs from "fs";
+import * as path from "path";
 
 let pool: Pool | null = null;
+
+function getSslConfig(): false | { rejectUnauthorized: boolean; ca: string } {
+    // Prefer inline cert string, then fall back to file path
+    if (process.env.DB_SSL_CA) {
+        return { rejectUnauthorized: true, ca: process.env.DB_SSL_CA };
+    }
+    if (process.env.DB_SSL_CA_PATH) {
+        try {
+            const certPath = path.resolve(process.env.DB_SSL_CA_PATH);
+            const ca = fs.readFileSync(certPath, "utf8");
+            return { rejectUnauthorized: true, ca };
+        } catch (err) {
+            console.warn(`Knowledge Base SDK: Failed to read SSL CA from ${process.env.DB_SSL_CA_PATH}:`, err);
+        }
+    }
+    return false;
+}
 
 export function getPool(): Pool {
     if (!pool) {
@@ -13,12 +32,7 @@ export function getPool(): Pool {
             max: 10,
             idleTimeoutMillis: 30000,
             connectionTimeoutMillis: 30000, // Increased to 30 seconds for remote DB
-            ssl: process.env.DB_SSL_CA
-                ? {
-                    rejectUnauthorized: true,
-                    ca: process.env.DB_SSL_CA,
-                }
-                : false,
+            ssl: getSslConfig(),
         });
 
         pool.on("error", (err) => {
