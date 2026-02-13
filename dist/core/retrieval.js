@@ -97,7 +97,11 @@ async function queryAgentWithTools(agentId, query, options) {
             (0, tools_1.createGetFareRatesTool)(options.toolContext),
             (0, tools_1.createGetVehicleRatesTool)(options.toolContext),
         ];
-        systemPrompt = `${systemPrompt}
+        if (options?.systemPromptSuffix) {
+            systemPrompt = `${systemPrompt}${options.systemPromptSuffix}`;
+        }
+        else {
+            systemPrompt = `${systemPrompt}
 
 You have access to live data tools for real-time trip and fare information:
 
@@ -117,14 +121,15 @@ You have access to live data tools for real-time trip and fare information:
    - Optional: vehicle_type
 
 **Important Port Codes:**
-- CEB = Cebu, MNL = Manila, BOG = Bogo, TAG = Tagbilaran, PAL = Palaui
-- DUM = Dumaguete, SIQ = Siquijor, ILO = Iloilo
+- CEB = Cebu, MNL = Manila, BOG = Bogo, TAG = Tagbilaran, PAL = Cagayan
+- DUM = Dumaguete, SIQ = Siquijor, ILO = Iloilo, COR = Cordova
 
 **When to use tools:**
 - For live schedules, availability, or pricing → USE TOOLS
 - For general info about Ayahay, services, policies → USE TRAINING DATA (context)
 
 Always use tools for real-time data. Your training data is for general information only.`;
+        }
     }
     const messages = [
         ['system', systemPrompt],
@@ -259,7 +264,11 @@ async function* streamQueryAgent(agentId, query, options) {
             (0, tools_1.createGetFareRatesTool)(options.toolContext),
             (0, tools_1.createGetVehicleRatesTool)(options.toolContext),
         ];
-        systemPrompt = `${systemPrompt}
+        if (options?.systemPromptSuffix) {
+            systemPrompt = `${systemPrompt}${options.systemPromptSuffix}`;
+        }
+        else {
+            systemPrompt = `${systemPrompt}
 
 You have access to live data tools for real-time trip and fare information:
 
@@ -279,14 +288,15 @@ You have access to live data tools for real-time trip and fare information:
    - Optional: vehicle_type
 
 **Important Port Codes:**
-- CEB = Cebu, MNL = Manila, BOG = Bogo, TAG = Tagbilaran, PAL = Palaui
-- DUM = Dumaguete, SIQ = Siquijor, ILO = Iloilo
+- CEB = Cebu, MNL = Manila, BOG = Bogo, TAG = Tagbilaran, PAL = Cagayan
+- DUM = Dumaguete, SIQ = Siquijor, ILO = Iloilo, COR = Cordova
 
 **When to use tools:**
 - For live schedules, availability, or pricing → USE TOOLS
 - For general info about Ayahay, services, policies → USE TRAINING DATA (context)
 
 Always use tools for real-time data. Your training data is for general information only.`;
+        }
     }
     const messages = [
         ['system', systemPrompt],

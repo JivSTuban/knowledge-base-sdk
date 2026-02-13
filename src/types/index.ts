@@ -62,6 +62,7 @@ export interface ChatMessage {
 
 export interface QueryOptions {
     systemPrompt?: string;
+    systemPromptSuffix?: string; // Appended to system prompt (e.g. dynamic tool instructions)
     k?: number; // Number of similar documents to retrieve
     history?: ChatMessage[]; // Conversation history for multi-turn context
 }

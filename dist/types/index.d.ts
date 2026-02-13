@@ -54,6 +54,7 @@ export interface ChatMessage {
 }
 export interface QueryOptions {
     systemPrompt?: string;
+    systemPromptSuffix?: string;
     k?: number;
     history?: ChatMessage[];
 }
