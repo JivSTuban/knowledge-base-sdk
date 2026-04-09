@@ -22,7 +22,7 @@ export declare function createSearchTripsTool(context: ToolContext): DynamicStru
     destination_code: string;
     date: string;
     tenant_id?: number | undefined;
-}, string, "search_trips">;
+}, string, unknown, "search_trips">;
 export declare function createGetFareRatesTool(context: ToolContext): DynamicStructuredTool<z.ZodObject<{
     origin_code: z.ZodString;
     destination_code: z.ZodString;
@@ -53,7 +53,7 @@ export declare function createGetFareRatesTool(context: ToolContext): DynamicStr
     success: boolean;
     error: any;
     rates: never[];
-} | undefined, "get_fare_rates">;
+} | undefined, unknown, "get_fare_rates">;
 export declare function createGetVehicleRatesTool(context: ToolContext): DynamicStructuredTool<z.ZodObject<{
     origin_code: z.ZodString;
     destination_code: z.ZodString;
@@ -90,5 +90,5 @@ export declare function createGetVehicleRatesTool(context: ToolContext): Dynamic
     origin?: undefined;
     destination?: undefined;
     shipping_lines?: undefined;
-}, "get_vehicle_rates">;
+}, unknown, "get_vehicle_rates">;
 //# sourceMappingURL=tools.d.ts.map

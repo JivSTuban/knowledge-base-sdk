@@ -50,6 +50,11 @@ async function parsePDF(buffer) {
     const data = await pdfParse(buffer);
     return data.text;
 }
+async function parseDOCX(buffer) {
+    const mammoth = require("mammoth");
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
+}
 async function trainAgent(files, agentId, urls, tenantId, systemPrompt) {
     const documents = [];
     let uploadedFiles = [];
@@ -71,27 +76,27 @@ async function trainAgent(files, agentId, urls, tenantId, systemPrompt) {
                 const originalFile = files.find(f => f.originalname === uploaded.file);
                 const size = originalFile ? originalFile.buffer.length : 0;
                 const mimeType = originalFile ? originalFile.mimetype : "application/octet-stream";
-                const dbResult = await (0, db_1.executeQuery)(`INSERT INTO knowledge_base.files 
-                    (agent_id, file_name, s3_key, s3_url, file_type, file_size, tenant_id)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7) 
-                    ON CONFLICT DO NOTHING 
-                    RETURNING id`, [
-                    agentId,
-                    uploaded.file,
-                    uploaded.key,
-                    uploaded.url,
-                    mimeType,
-                    size,
-                    tenantId || null
-                ]);
-                if (dbResult && dbResult.length > 0) {
-                    fileIds.set(uploaded.file, dbResult[0].id);
+                const existing = await (0, db_1.executeQuery)(`SELECT id FROM knowledge_base.files WHERE agent_id = $1 AND file_name = $2 LIMIT 1`, [agentId, uploaded.file]);
+                if (existing && existing.length > 0) {
+                    fileIds.set(uploaded.file, existing[0].id);
+                    fileIdsToReplace.add(existing[0].id);
+                    await (0, db_1.executeQuery)(`UPDATE knowledge_base.files SET s3_key = $1, s3_url = $2, file_size = $3, updated_at = NOW() WHERE id = $4`, [uploaded.key, uploaded.url, size, existing[0].id]);
                 }
                 else {
-                    const existing = await (0, db_1.executeQuery)(`SELECT id FROM knowledge_base.files WHERE agent_id = $1 AND file_name = $2`, [agentId, uploaded.file]);
-                    if (existing && existing.length > 0) {
-                        fileIds.set(uploaded.file, existing[0].id);
-                        fileIdsToReplace.add(existing[0].id);
+                    const dbResult = await (0, db_1.executeQuery)(`INSERT INTO knowledge_base.files
+                        (agent_id, file_name, s3_key, s3_url, file_type, file_size, tenant_id)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        RETURNING id`, [
+                        agentId,
+                        uploaded.file,
+                        uploaded.key,
+                        uploaded.url,
+                        mimeType.substring(0, 50),
+                        size,
+                        tenantId || null
+                    ]);
+                    if (dbResult && dbResult.length > 0) {
+                        fileIds.set(uploaded.file, dbResult[0].id);
                     }
                 }
             }
@@ -140,9 +145,12 @@ async function trainAgent(files, agentId, urls, tenantId, systemPrompt) {
                     },
                 });
             }
-            else if (file.mimetype ===
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-                const text = file.buffer.toString("utf-8");
+            else if (file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+                file.mimetype === "application/octet-stream" ||
+                file.mimetype === "application/zip" ||
+                file.originalname.endsWith(".docx") ||
+                file.originalname.endsWith(".doc")) {
+                const text = await parseDOCX(file.buffer);
                 documents.push({
                     pageContent: text,
                     metadata: {
