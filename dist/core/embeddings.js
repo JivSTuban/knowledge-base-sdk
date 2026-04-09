@@ -12,7 +12,7 @@ function getEmbeddings() {
         embeddings = new openai_1.OpenAIEmbeddings({
             apiKey,
             model: "text-embedding-3-large",
-            dimensions: 1024,
+            dimensions: 1536,
             batchSize: 100,
         });
     }

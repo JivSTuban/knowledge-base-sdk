@@ -12,7 +12,7 @@ export function getEmbeddings(): OpenAIEmbeddings {
         embeddings = new OpenAIEmbeddings({
             apiKey,
             model: "text-embedding-3-large",
-            dimensions: 1024, // Reduce from 3072 to save storage, maintain quality
+            dimensions: 1536, // Must match vector(1536) column in knowledge_base.documents
             batchSize: 100,
         });
     }
